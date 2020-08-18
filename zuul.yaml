@@ -10,22 +10,22 @@
     manager: independent
     precedence: low
     require:
-      gerrit:
+      github:
         open: True
         current-patchset: True
     trigger:
-      gerrit:
+      github:
         - event: patchset-created
         - event: change-restored
         - event: comment-added
           comment: (?i)^(Patch Set [0-9]+:)?( [\w\\+-]*)*(\n\n)?\s*recheck
     success:
-      gerrit:
+      github:
         # Note that gerrit keywords are case-sensitive.
         Verified: 1
       mysql:
     failure:
-      gerrit:
+      github:
         Verified: -1
       mysql:
 
