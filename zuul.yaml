@@ -2,234 +2,104 @@
     name: check
     description: |
       Newly uploaded patchsets enter this pipeline to receive an
-      initial +/-1 Verified vote.
-    success-message: Build succeeded (check pipeline).
-    failure-message: |
-      Build failed (check pipeline).  For information on how to proceed, see
-      http://docs.openstack.org/infra/manual/developers.html#automated-testing
+      initial check status.
     manager: independent
-    precedence: low
-    require:
-      github:
-        open: True
-        current-patchset: True
     trigger:
       github:
-        - event: patchset-created
-        - event: change-restored
-        - event: comment-added
-          comment: (?i)^(Patch Set [0-9]+:)?( [\w\\+-]*)*(\n\n)?\s*recheck
+        - event: pull_request
+          action:
+            - opened
+            - changed
+            - reopened
+        - event: pull_request
+          action: comment
+          comment: (?i)^\s*recheck\s*$
+    start:
+      github:
+        status: 'pending'
+        status-url: "http://localhost:9000/t/quickstart/status"
+        comment: false
     success:
       github:
-        # Note that gerrit keywords are case-sensitive.
-        Verified: 1
-      mysql:
+        status: 'success'
+     
     failure:
       github:
-        Verified: -1
-      mysql:
-
+        status: 'failure'
 - pipeline:
     name: gate
     description: |
-      Changes that have been approved by core reviewers are enqueued
+      Changes that have been approved by core developers are enqueued
       in order in this pipeline, and if they pass tests, will be
-      merged. For documentation on how gating with Zuul works, please see
-      https://zuul-ci.org/docs/zuul/user/gating.html
-    success-message: Build succeeded (gate pipeline).
-    failure-message: |
-      Build failed (gate pipeline).  For information on how to proceed, see
-      http://docs.openstack.org/infra/manual/developers.html#automated-testing
+      merged.
     manager: dependent
-    precedence: normal
+    precedence: high
     supercedes: check
-    post-review: True
     require:
-      gerrit:
+      github:
+        review:
+          # Require an approval from user with write access (e.g. core-reviewer)
+          - permission: write
+            type: approved
+        # Require label
+        label: gate
         open: True
         current-patchset: True
-        approval:
-          - Workflow: 1
     trigger:
-      gerrit:
-        - event: comment-added
-          approval:
-            - Workflow: 1
-        - event: comment-added
-          comment: (?i)^(Patch Set [0-9]+:)?( [\w\\+-]*)*(\n\n)?\s*re(check|verify)
+      github:
+        - event: pull_request_review
+          action: submitted
+          state: approved
+        - event: pull_request
+          action: comment
+          comment: (?i)^\s*regate\s*$
+        - event: pull_request_review
+          action: submitted
+          state: approved
+        - event: pull_request_review
+          action: dismissed
+          state: request_changes
+        - event: pull_request
+          action: status
+          status: ".*:success"
+        - event: pull_request
+          action: labeled
+          label: gate
     start:
-      gerrit:
-        Verified: 0
+      github:
+        status: 'pending'
+        status-url: "http://localhost:9000/t/quickstart/status"
+        comment: false
     success:
-      gerrit:
-        Verified: 2
-        submit: true
-      mysql:
+      github:
+        status: 'success'
+        merge: true
+        comment: true
+     
     failure:
-      gerrit:
-        Verified: -2
-      mysql:
+      github:
+        status: 'failure'
+        comment: true
+     
     window-floor: 20
     window-increase-factor: 2
-
 - pipeline:
     name: post
-    description: |
-      This pipeline runs jobs that operate after each change is
-      merged. Queue items are identified by the abbreviated hash (git
-      log --format=%h) of the merge commit.
-    manager: supercedent
-    precedence: high
-    post-review: True
+    post-review: true
+    description: This pipeline runs jobs that operate after each change is merged.
+    manager: independent
+    precedence: low
     trigger:
-      gerrit:
-        - event: ref-updated
+      github:
+        - event: push
           ref: ^refs/heads/.*$
     success:
-      mysql:
+      github:
+        status: 'success'
+        merge: true
+        comment: true
+     
     failure:
-      mysql:
-
-- pipeline:
-    name: promote
-    description: |
-      This pipeline runs jobs that operate after each change is merged
-      in order to promote artifacts generated in the gate
-      pipeline.
-    success-message: Build succeeded (promote pipeline).
-    failure-message: |
-      Build failed (promote pipeline).  For information on how to proceed, see
-      http://docs.openstack.org/infra/manual/developers.html#automated-testing
-    manager: supercedent
-    precedence: high
-    post-review: True
-    trigger:
-      gerrit:
-        - event: change-merged
-    success:
-      gerrit: {}
-      mysql:
-    failure:
-      gerrit: {}
-      mysql:
-
-- pipeline:
-    name: release
-    description: |
-      When a commit is tagged as a release, this pipeline runs jobs
-      that publish archives and documentation.
-    manager: independent
-    precedence: high
-    post-review: True
-    trigger:
-      gerrit:
-        - event: ref-updated
-          ref: ^refs/tags/[0-9]+(\.[0-9]+)*$
-    success:
-      mysql:
-    failure:
-      mysql:
-
-- pipeline:
-    name: periodic
-    post-review: true
-    description: Jobs in this queue are triggered on a timer.
-    manager: independent
-    precedence: low
-    trigger:
-      timer:
-        - time: '0 6 * * *'
-    success:
-      mysql:
-    failure:
-      mysql:
-
-- pipeline:
-    name: tag
-    post-review: true
-    description: This pipeline runs jobs in response to any tag event.
-    manager: independent
-    precedence: high
-    trigger:
-      gerrit:
-        - event: ref-updated
-          ref: ^refs/tags/.*$
-    success:
-      mysql:
-    failure:
-      mysql:
-
-- pipeline:
-    name: experimental
-    description: |
-      On-demand pipeline for requesting a run against a set of jobs
-      that are not yet gating. Leave review comment of "check
-      experimental" to run jobs in this pipeline.
-    success-message: Build succeeded (experimental pipeline).
-    failure-message: Build failed (experimental pipeline).
-    manager: independent
-    precedence: low
-    trigger:
-      gerrit:
-        - event: comment-added
-          comment: (?i)^(Patch Set [0-9]+:)?( [\w\\+-]*)*(\n\n)?\s*check experimental\s*$
-    success:
-      gerrit: {}
-      mysql:
-    failure:
-      gerrit: {}
-      mysql:
-
-- pipeline:
-    name: third-party-check
-    description: |
-      Newly uploaded patchsets to external projects enter this
-      pipeline to receive an initial +/-1 Verified vote.
-    success-message: Build succeeded (third-party-check pipeline).
-    # TODO(mordred) We should write a document for non-OpenStack developers
-    failure-message: |
-      Build failed (third-party-check pipeline) integration testing with
-      Zuul. For information on how to proceed, see
-      http://docs.openstack.org/infra/manual/developers.html#automated-testing
-    manager: independent
-    trigger:
-      googlesource:
-        - event: pending-check
-          scheme: 'opendev-zuul-third-party-check'
-    enqueue:
-      googlesource:
-        comment: False
-        checks-api:
-          scheme: 'opendev-zuul-third-party-check'
-          state: SCHEDULED
-          message: 'Change has been enqueued in check'
-    start:
-      googlesource:
-        comment: False
-        checks-api:
-          scheme: 'opendev-zuul-third-party-check'
-          state: RUNNING
-          message: 'Jobs have started running'
-    no-jobs:
-      googlesource:
-        comment: False
-        checks-api:
-          scheme: 'opendev-zuul-third-party-check'
-          state: NOT_RELEVANT
-          message: 'Project has no jobs configured'
-    success:
-      googlesource:
-        comment: False
-        checks-api:
-          scheme: 'opendev-zuul-third-party-check'
-          state: SUCCESSFUL
-          message: 'Change passed all voting jobs'
-      mysql:
-    failure:
-      googlesource:
-        comment: False
-        checks-api:
-          scheme: 'opendev-zuul-third-party-check'
-          state: FAILED
-          message: 'Change failed'
-      mysql:
+      github:
+        status: 'failure'
+        comment: true
