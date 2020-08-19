@@ -19,7 +19,7 @@
     start:
       github.com:
         status: 'pending'
-        status-url: "https://ansible.softwarefactory-project.io/zuul/status.html"
+        status-url: "http://localhost:9000/t/quickstart/status"
         comment: false
       mqtt:
         topic: "zuul/{pipeline}/start/{project}/{branch}"
