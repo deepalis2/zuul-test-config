@@ -8,12 +8,12 @@
     manager: independent
     trigger:
       github.com:
-        - event: Merge pull request
+        - event: pull_request
           action:
             - opened
             - changed
             - reopened
-        - event:  Merge pull request
+        - event: pull_request
           action: comment
           comment: (?i)^\s*recheck\s*$
     start:
