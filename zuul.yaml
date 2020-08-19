@@ -2,10 +2,10 @@
     name: check
     description: |
       Newly uploaded patchsets enter this pipeline to receive an
-      initial +/-1 Verified vote.
+      initial check status.
     manager: independent
     trigger:
-      github.com:
+      github:
         - event: pull_request
           action:
             - opened
@@ -15,15 +15,16 @@
           action: comment
           comment: (?i)^\s*recheck\s*$
     start:
-      github.com:
+      github:
         status: 'pending'
         status-url: "http://localhost:9000/t/quickstart/status"
         comment: false
     success:
-      github.com:
+      github:
         status: 'success'
+     
     failure:
-      github.com:
+      github:
         status: 'failure'
 - pipeline:
     name: gate
@@ -82,3 +83,23 @@
      
     window-floor: 20
     window-increase-factor: 2
+- pipeline:
+    name: post
+    post-review: true
+    description: This pipeline runs jobs that operate after each change is merged.
+    manager: independent
+    precedence: low
+    trigger:
+      github:
+        - event: push
+          ref: ^refs/heads/.*$
+    success:
+      github:
+        status: 'success'
+        merge: true
+        comment: true
+     
+    failure:
+      github:
+        status: 'failure'
+        comment: true
